@@ -42,7 +42,7 @@ const COLORS = {
 
 // ----------------------------- État global -----------------------------
 let scene, camera, renderer, clock;
-let player, board;
+let player, board, boardFlip;
 let torso, leftLeg, rightLeg, leftArm, rightArm; // leftLeg/rightLeg/leftArm/rightArm = { root, joint }
 const anim = {
   rollPhase: 0,
@@ -52,6 +52,7 @@ const anim = {
 };
 let rideableMeshes = [];
 let grindRails = []; // { a: Vector3, b: Vector3 } (y déjà inclus dans a/b)
+let colliders = []; // { x, z, radius, height } — obstacles compacts qui bloquent le joueur horizontalement
 
 const state = {
   pos: new THREE.Vector3(0, 0.4, 10),
@@ -65,7 +66,11 @@ const state = {
   score: 0,
   timeLeft: MATCH_TIME,
   over: false,
+  trickActive: false,
+  trickTime: 0,
 };
+
+const TRICK_DURATION = 0.45; // secondes pour un tour complet de kickflip
 
 const keys = {};
 
@@ -206,6 +211,7 @@ function buildHangar() {
       const post = toonMesh(new THREE.CylinderGeometry(0.35, 0.35, wallHeight, 10), COLORS.metalDark);
       post.position.set(x, wallHeight / 2, z);
       scene.add(post);
+      addCollider(x, z, 0.45, wallHeight);
     });
 
     // Arche du toit (ligne fine, purement décorative, accent néon)
@@ -287,36 +293,162 @@ function createFloorTexture() {
   return texture;
 }
 
-// Décor lointain visible à travers l'ouverture du hangar : arbres et
-// immeubles stylisés en fond, dans des tons discrets.
+// Décor lointain autour du skatepark : plage + mer + soleil d'un côté
+// (au-delà de -Z), un parking avec quelques voitures de l'autre (au-delà
+// de +X) — visible à travers l'ossature ouverte du hangar.
 function buildBackgroundScenery() {
-  const trunkMat = toonMat(0x5b4636);
-  for (let i = 0; i < 10; i++) {
-    const x = (Math.random() - 0.5) * (HALF_W * 2 + 30);
-    const z = -HALF_L - 15 - Math.random() * 20;
-    const scale = 0.8 + Math.random() * 0.9;
+  buildBeachAndSea();
+  buildSun();
+  buildParkingLot();
+}
 
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 2 * scale, 6), trunkMat);
-    trunk.position.set(x, scale, z);
-    scene.add(trunk);
+function buildBeachAndSea() {
+  const beachNearZ = -HALF_L;
 
-    const foliage = toonMesh(new THREE.SphereGeometry(1.4 * scale, 8, 8), 0x4f7942);
-    foliage.position.set(x, 2.6 * scale, z);
-    scene.add(foliage);
+  // Plage de sable juste après la limite du hangar
+  const sand = toonMesh(new THREE.PlaneGeometry(HALF_W * 2 + 60, 20), 0xe8d9a6);
+  sand.rotation.x = -Math.PI / 2;
+  sand.position.set(0, -0.04, beachNearZ - 10);
+  scene.add(sand);
+
+  // Quelques palmiers dispersés sur la plage
+  for (let i = 0; i < 7; i++) {
+    const x = -HALF_W - 15 + i * 9 + (Math.random() - 0.5) * 5;
+    const z = beachNearZ - 4 - Math.random() * 10;
+    buildPalmTree(x, z);
   }
 
-  const buildingMat = [0xd7dbe0, 0x8a94a6, 0xb8bcc2];
+  // Mer, avec une texture de vaguelettes peinte sur canvas
+  const sea = new THREE.Mesh(
+    new THREE.PlaneGeometry(300, 180),
+    new THREE.MeshToonMaterial({ map: createSeaTexture(), gradientMap: getToonGradient() })
+  );
+  sea.rotation.x = -Math.PI / 2;
+  sea.position.set(0, -0.08, beachNearZ - 60);
+  scene.add(sea);
+}
+
+function createSeaTexture() {
+  const w = 256, h = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#2f9bd6";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "rgba(255,255,255,0.55)";
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 12; i++) {
+    const y = (i / 12) * h + Math.random() * 8;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    for (let x = 0; x <= w; x += 16) {
+      ctx.lineTo(x, y + Math.sin(x * 0.05 + i) * 4);
+    }
+    ctx.stroke();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(5, 3);
+  return texture;
+}
+
+function buildPalmTree(x, z) {
+  const trunkGeom = new THREE.CylinderGeometry(0.12, 0.2, 3.2, 6);
+  trunkGeom.translate(0, 1.6, 0); // pose la base au sol
+  const trunk = toonMesh(trunkGeom, 0x8a5a3b);
+  trunk.rotation.z = 0.14;
+  trunk.position.set(x, 0, z);
+  scene.add(trunk);
+
+  const frondMat = toonMat(0x2f9e44);
+  for (let i = 0; i < 6; i++) {
+    const frondGroup = new THREE.Group();
+    frondGroup.position.set(x + Math.sin(0.14) * 3.3, 3.3, z);
+    frondGroup.rotation.y = (i / 6) * Math.PI * 2;
+    const frond = new THREE.Mesh(new THREE.ConeGeometry(0.16, 1.5, 4), frondMat);
+    frond.position.set(0.75, 0.1, 0);
+    frond.rotation.z = Math.PI / 2 - 0.5;
+    frondGroup.add(frond);
+    scene.add(frondGroup);
+  }
+}
+
+function buildSun() {
+  const sunPos = new THREE.Vector3(-28, 24, -HALF_L - 75);
+  const sun = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffe14d }));
+  sun.position.copy(sunPos);
+  scene.add(sun);
+
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(9.5, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0.22 })
+  );
+  halo.position.copy(sunPos);
+  scene.add(halo);
+}
+
+function buildParkingLot() {
+  const lotX = HALF_W + 16;
+
+  const lot = new THREE.Mesh(
+    new THREE.PlaneGeometry(20, 46),
+    new THREE.MeshToonMaterial({ map: createParkingTexture(), gradientMap: getToonGradient() })
+  );
+  lot.rotation.x = -Math.PI / 2;
+  lot.position.set(lotX, -0.03, -6);
+  scene.add(lot);
+
+  const carColors = [0xff6b6b, 0x4dabf7, 0xffe14d, 0xd7dbe0, 0x63e6be];
   for (let i = 0; i < 5; i++) {
-    const x = (Math.random() - 0.5) * (HALF_W * 2 + 10);
-    const z = -HALF_L - 25 - Math.random() * 15;
-    const height = 5 + Math.random() * 6;
-    const building = toonMesh(
-      new THREE.BoxGeometry(4 + Math.random() * 2, height, 4),
-      buildingMat[i % buildingMat.length]
-    );
-    building.position.set(x, height / 2, z);
-    scene.add(building);
+    buildCar(lotX, -18 + i * 9, carColors[i % carColors.length]);
   }
+}
+
+function createParkingTexture() {
+  const w = 200, h = 460;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#4b5259";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#e8e8e8";
+  ctx.lineWidth = 4;
+  for (let i = 0; i < 5; i++) {
+    const y = 20 + i * 90;
+    ctx.beginPath();
+    ctx.moveTo(20, y);
+    ctx.lineTo(20, y + 70);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(w - 20, y);
+    ctx.lineTo(w - 20, y + 70);
+    ctx.stroke();
+  }
+  return new THREE.CanvasTexture(canvas);
+}
+
+function buildCar(x, z, color) {
+  const base = toonMesh(new THREE.BoxGeometry(1.7, 0.5, 3.4), color);
+  base.position.set(x, 0.35, z);
+  scene.add(base);
+
+  const cabin = toonMesh(new THREE.BoxGeometry(1.4, 0.4, 1.8), color);
+  cabin.position.set(x, 0.75, z - 0.2);
+  scene.add(cabin);
+
+  [
+    [-0.75, 1.1],
+    [-0.75, -1.1],
+    [0.75, 1.1],
+    [0.75, -1.1],
+  ].forEach(([dx, dz]) => {
+    const wheel = toonMesh(new THREE.CylinderGeometry(0.28, 0.28, 0.22, 10), COLORS.metalDark);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x + dx, 0.28, z + dz);
+    scene.add(wheel);
+  });
 }
 
 // ----------------------------- Skatepark (inspiré du park d'Anglet, style cartoon) -----------------------------
@@ -474,6 +606,7 @@ function buildStandaloneRail(a, b, color = COLORS.neonCyan) {
     const leg = toonMesh(new THREE.BoxGeometry(0.18, railHeight, 0.5), COLORS.metalDark);
     leg.position.set(p.x, railHeight / 2, p.z);
     scene.add(leg);
+    addCollider(p.x, p.z, 0.3, railHeight);
   });
 
   addGrindRail(
@@ -481,6 +614,27 @@ function buildStandaloneRail(a, b, color = COLORS.neonCyan) {
     new THREE.Vector3(b.x, railHeight, b.z),
     color
   );
+}
+
+// Ajoute un obstacle compact qui bloque le joueur horizontalement (piste
+// circulaire simple) tant qu'il est en dessous de `height` — au-dessus, on
+// laisse passer (le joueur saute par-dessus ou est en train d'atterrir dessus).
+function addCollider(x, z, radius, height) {
+  colliders.push({ x, z, radius, height });
+}
+
+function resolveHorizontalCollisions() {
+  for (const c of colliders) {
+    if (state.pos.y > c.height) continue;
+    const dx = state.pos.x - c.x;
+    const dz = state.pos.z - c.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < c.radius && dist > 1e-4) {
+      const push = c.radius - dist;
+      state.pos.x += (dx / dist) * push;
+      state.pos.z += (dz / dist) * push;
+    }
+  }
 }
 
 function addGrindRail(a, b, color = COLORS.metalLight) {
@@ -543,11 +697,61 @@ function buildPlayer() {
   rightArm.root.position.set(0.32, 1.2, 0);
   player.add(rightArm.root);
 
-  board = toonMesh(new THREE.BoxGeometry(0.5, 0.08, 1.7), COLORS.neonRed);
+  board = buildBoard();
   board.position.y = 0.24;
   player.add(board);
 
   scene.add(player);
+}
+
+// Construit une planche détaillée : plateau avec nose/tail relevés (kicks),
+// trucks et roues. Renvoie un groupe "outer" (position + inclinaison de la
+// planche, rotation.x) qui contient un groupe "boardFlip" (rotation.z, pour
+// faire tourner la planche façon kickflip pendant une figure).
+function buildBoard() {
+  const outer = new THREE.Group();
+  boardFlip = new THREE.Group();
+  outer.add(boardFlip);
+
+  const L = 1.7, W = 0.46, thickness = 0.05, kickHeight = 0.14, kickLen = 0.34;
+  const shape = new THREE.Shape();
+  shape.moveTo(-L / 2, kickHeight);
+  shape.lineTo(-L / 2 + kickLen, 0);
+  shape.lineTo(L / 2 - kickLen, 0);
+  shape.lineTo(L / 2, kickHeight);
+  shape.lineTo(L / 2, kickHeight - thickness);
+  shape.lineTo(L / 2 - kickLen, -thickness);
+  shape.lineTo(-L / 2 + kickLen, -thickness);
+  shape.lineTo(-L / 2, kickHeight - thickness);
+  shape.lineTo(-L / 2, kickHeight);
+
+  const deckGeom = new THREE.ExtrudeGeometry(shape, { depth: W, bevelEnabled: false });
+  deckGeom.translate(0, 0, -W / 2);
+  deckGeom.rotateY(Math.PI / 2); // la longueur (nez/queue) suit l'axe Z, comme avant
+  const deck = toonMesh(deckGeom, COLORS.neonRed);
+  boardFlip.add(deck);
+
+  // Petite bande blanche façon grip/déco sur le dessus
+  const stripe = toonMesh(new THREE.BoxGeometry(0.09, 0.012, L - kickLen * 1.5), COLORS.metalLight);
+  stripe.position.y = 0.006;
+  boardFlip.add(stripe);
+
+  // Trucks + roues, près de chaque partie plate (avant que le kick ne commence)
+  const truckZ = L / 2 - kickLen - 0.08;
+  [truckZ, -truckZ].forEach((z) => {
+    const truck = toonMesh(new THREE.BoxGeometry(0.42, 0.05, 0.09), COLORS.metalLight);
+    truck.position.set(0, -thickness - 0.03, z);
+    boardFlip.add(truck);
+
+    [-0.19, 0.19].forEach((x) => {
+      const wheel = toonMesh(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 10), COLORS.neonYellow);
+      wheel.rotation.z = Math.PI / 2; // roue "sur le côté", axe le long de X
+      wheel.position.set(x, -thickness - 0.09, z);
+      boardFlip.add(wheel);
+    });
+  });
+
+  return outer;
 }
 
 // Construit une chaîne à 2 segments (bras ou jambe) : un pivot "root" à
@@ -672,6 +876,7 @@ function update(dt) {
   updateCombo(dt);
   updatePlayerTransform();
   animatePlayer(dt);
+  updateTrick(dt);
   updateCamera(dt);
   updateTimer(dt);
   updateUI();
@@ -712,6 +917,31 @@ function handleInput(dt) {
     keys["KeyR"] = false;
     respawn();
   }
+
+  if (keys["KeyX"]) {
+    keys["KeyX"] = false;
+    if (!state.grounded && !state.grinding && !state.trickActive) {
+      state.trickActive = true;
+      state.trickTime = 0;
+      addScore(150, "KICKFLIP !");
+    }
+  }
+}
+
+// Fait tourner la planche sur elle-même (façon kickflip) pendant une figure ;
+// revient doucement à plat sinon.
+function updateTrick(dt) {
+  if (!state.trickActive) {
+    boardFlip.rotation.z *= Math.max(0, 1 - 10 * dt);
+    return;
+  }
+  state.trickTime += dt;
+  const t = Math.min(state.trickTime / TRICK_DURATION, 1);
+  boardFlip.rotation.z = t * Math.PI * 2;
+  if (t >= 1) {
+    state.trickActive = false;
+    boardFlip.rotation.z = 0;
+  }
 }
 
 function updatePhysics(dt) {
@@ -725,6 +955,9 @@ function updatePhysics(dt) {
   const margin = 1;
   state.pos.x = THREE.MathUtils.clamp(state.pos.x, -HALF_W + margin, HALF_W - margin);
   state.pos.z = THREE.MathUtils.clamp(state.pos.z, -HALF_L + margin, HALF_L - margin);
+
+  // Bloque le joueur contre les obstacles compacts (poteaux, pieds de rail...)
+  resolveHorizontalCollisions();
 
   // Gravité
   state.vy += GRAVITY * dt;
@@ -890,6 +1123,8 @@ function respawn() {
   state.grinding = null;
   state.comboCount = 0;
   state.comboTimer = 0;
+  state.trickActive = false;
+  state.trickTime = 0;
 }
 
 function endGame() {

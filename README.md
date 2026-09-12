@@ -7,8 +7,9 @@ shading et contours noirs. La carte reprend l'agencement du
 une plaza en béton, une pyramide/hip centrale avec rail néon sur
 l'arête, des quarter-pipes et une rampe banque en béton, un rail isolé
 sur pieds métalliques, un ledge, et un **bowl** (piscine creusée) avec
-coping néon grindable tout autour — le tout sous un hangar ouvert avec
-un peu de décor (arbres, immeubles) visible au loin.
+coping néon grindable tout autour — le tout sous un hangar ouvert. Au
+loin : une plage avec palmiers, la mer et le soleil d'un côté, un
+parking avec quelques voitures de l'autre.
 
 Construit avec [Three.js](https://threejs.org/) (r128, `MeshToonMaterial`
 + contours via `EdgesGeometry`) + un petit serveur Express pour servir
@@ -47,9 +48,28 @@ l'autre plutôt que de changer de pose brutalement.
 
 - Flèches ou **ZQSD** : rouler / diriger le skateur
 - **Espace** : ollie (saut), ou pop-off pour sortir d'un grind
+- **X** : figure (kickflip) pendant que tu es en l'air
 - Approche-toi d'un rail/curb en l'air pour t'accrocher automatiquement
   et grinder
 - **R** : réinitialiser la position si tu restes coincé
+
+## La planche
+
+Le plateau (`buildBoard()`) a une vraie forme de skateboard : nose et
+tail relevés (kicks), trucks et roues sous le plateau. Une figure
+(**X** en l'air) fait tourner la planche sur elle-même façon kickflip
+(`boardFlip`, un groupe séparé de l'inclinaison normale de la planche)
+et rapporte des points ; réussie ou non, la planche revient à plat en
+douceur.
+
+## Collisions
+
+En plus du raycast de sol (rampes, bowl, pyramide...), les obstacles
+compacts — poteaux du hangar, pieds du rail isolé — bloquent
+maintenant le joueur horizontalement (`colliders`, résolu dans
+`resolveHorizontalCollisions()`) : impossible de les traverser en
+roulant. Le blocage ne s'applique qu'en dessous de la hauteur de
+l'obstacle, donc sauter par-dessus reste possible.
 
 ## Structure
 
@@ -184,8 +204,8 @@ Mac mini dans les 5 minutes qui suivent — sans rien faire de plus.
 
 - Vrais modèles 3D (skateur, planche) au lieu des formes géométriques
   simples actuelles.
-- Plus de tricks : grabs, flips, manuals, grind à 50-50/nose/tail avec
-  différents scores.
+- Plus de tricks : grabs, autres flips, manuals, grind à
+  50-50/nose/tail avec différents scores.
 - Système de bail (chute) quand on atterrit mal ou qu'on quitte un
   grind en déséquilibre.
 - D'autres cartes / autres skateparks réels comme inspiration.
