@@ -23,6 +23,22 @@ npm start
 
 Puis ouvre http://localhost:8081 dans ton navigateur.
 
+## Animation du skateur
+
+Le personnage a un petit squelette procédural (torse, tête, bras et
+jambes articulés) animé selon l'état du jeu, dans `animatePlayer()` :
+
+- **En train de rouler** : les jambes pompent en alternance (vitesse du
+  mouvement liée à la vitesse du skateur) et les bras balancent en
+  opposition.
+- **En l'air (ollie)** : jambes repliées, bras levés/écartés pour
+  l'équilibre.
+- **En grind** : position accroupie, bras tendus à l'horizontale de
+  chaque côté.
+
+Les transitions sont amorties (lerp) pour rester fluides d'un état à
+l'autre plutôt que de changer de pose brutalement.
+
 ## Contrôles
 
 - Flèches ou **ZQSD** : rouler / diriger le skateur

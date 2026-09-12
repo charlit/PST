@@ -43,6 +43,11 @@ const COLORS = {
 // ----------------------------- État global -----------------------------
 let scene, camera, renderer, clock;
 let player, board;
+let torso, leftLeg, rightLeg, leftArm, rightArm;
+const anim = {
+  rollPhase: 0,
+  legL: 0, legR: 0, armL: 0, armR: 0, armLz: 0, armRz: 0, // valeurs courantes (amorties)
+};
 let rideableMeshes = [];
 let grindRails = []; // { a: Vector3, b: Vector3 } (y déjà inclus dans a/b)
 
@@ -490,22 +495,96 @@ function addGrindRail(a, b, color = COLORS.metalLight) {
 }
 
 // ----------------------------- Le skateur -----------------------------
+// Squelette simple à la main (pas de vrai rig/armature) : chaque membre est
+// un petit groupe pivoté à son articulation (épaule/hanche), tourné chaque
+// frame selon l'état du joueur (roule / saute / grinde) dans animatePlayer().
 function buildPlayer() {
   player = new THREE.Group();
 
-  const body = toonMesh(new THREE.CylinderGeometry(0.28, 0.28, 1.0, 10), COLORS.metalDark);
-  body.position.y = 0.75;
-  player.add(body);
+  torso = toonMesh(new THREE.CylinderGeometry(0.24, 0.2, 0.7, 10), COLORS.metalDark);
+  torso.position.y = 0.95;
+  player.add(torso);
 
-  const head = toonMesh(new THREE.SphereGeometry(0.24, 10, 10), 0xffe3c2);
-  head.position.y = 1.4;
+  const head = toonMesh(new THREE.SphereGeometry(0.22, 10, 10), 0xffe3c2);
+  head.position.y = 1.48;
   player.add(head);
+
+  // Jambes : pivot en haut (hanche), le membre pend vers le bas par défaut.
+  leftLeg = createLimb(0.11, 0.6, COLORS.metalDark);
+  leftLeg.position.set(-0.13, 0.62, 0);
+  player.add(leftLeg);
+
+  rightLeg = createLimb(0.11, 0.6, COLORS.metalDark);
+  rightLeg.position.set(0.13, 0.62, 0);
+  player.add(rightLeg);
+
+  // Bras : pivot en haut (épaule).
+  leftArm = createLimb(0.08, 0.5, 0xffe3c2);
+  leftArm.position.set(-0.32, 1.18, 0);
+  player.add(leftArm);
+
+  rightArm = createLimb(0.08, 0.5, 0xffe3c2);
+  rightArm.position.set(0.32, 1.18, 0);
+  player.add(rightArm);
 
   board = toonMesh(new THREE.BoxGeometry(0.5, 0.08, 1.7), COLORS.neonRed);
   board.position.y = 0.24;
   player.add(board);
 
   scene.add(player);
+}
+
+// Crée un membre (bras/jambe) : un groupe pivot + un mesh décalé vers le bas,
+// pour que la rotation du groupe agisse comme une charnière à l'articulation.
+function createLimb(radius, length, color) {
+  const pivot = new THREE.Group();
+  const mesh = toonMesh(new THREE.CylinderGeometry(radius, radius * 0.85, length, 8), color);
+  mesh.position.y = -length / 2;
+  pivot.add(mesh);
+  return pivot;
+}
+
+// Anime le squelette selon l'état courant : roule / en l'air / grind.
+function animatePlayer(dt) {
+  let targetLegL = 0, targetLegR = 0, targetArmL = 0, targetArmR = 0;
+  let targetArmLz = 0.15, targetArmRz = -0.15; // légèrement écartés par défaut
+
+  if (state.grinding) {
+    // Position accroupie, bras écartés à l'horizontale pour l'équilibre.
+    targetLegL = targetLegR = 0.55;
+    targetArmLz = 1.3;
+    targetArmRz = -1.3;
+  } else if (!state.grounded) {
+    // En l'air : jambes repliées, bras levés/écartés.
+    targetLegL = targetLegR = 0.95;
+    targetArmLz = 1.0;
+    targetArmRz = -1.0;
+  } else {
+    // Au sol, en train de rouler : jambes qui pompent alternativement.
+    anim.rollPhase += Math.abs(state.speed) * dt * 2.2;
+    const swing = Math.sin(anim.rollPhase) * Math.min(Math.abs(state.speed) / MAX_SPEED, 1) * 0.35;
+    targetLegL = 0.15 + swing;
+    targetLegR = 0.15 - swing;
+    targetArmL = -swing * 0.7;
+    targetArmR = swing * 0.7;
+  }
+
+  // Amortissement : on interpole doucement vers la cible pour éviter les
+  // à-coups quand on change d'état (ollie, atterrissage, grind...).
+  const damp = 1 - Math.pow(0.001, dt);
+  anim.legL += (targetLegL - anim.legL) * damp;
+  anim.legR += (targetLegR - anim.legR) * damp;
+  anim.armL += (targetArmL - anim.armL) * damp;
+  anim.armR += (targetArmR - anim.armR) * damp;
+  anim.armLz += (targetArmLz - anim.armLz) * damp;
+  anim.armRz += (targetArmRz - anim.armRz) * damp;
+
+  leftLeg.rotation.x = anim.legL;
+  rightLeg.rotation.x = anim.legR;
+  leftArm.rotation.x = anim.armL;
+  rightArm.rotation.x = anim.armR;
+  leftArm.rotation.z = anim.armLz;
+  rightArm.rotation.z = anim.armRz;
 }
 
 // ----------------------------- Boucle de jeu -----------------------------
@@ -528,6 +607,7 @@ function update(dt) {
   }
   updateCombo(dt);
   updatePlayerTransform();
+  animatePlayer(dt);
   updateCamera(dt);
   updateTimer(dt);
   updateUI();
