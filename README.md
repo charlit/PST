@@ -25,18 +25,22 @@ Puis ouvre http://localhost:8081 dans ton navigateur.
 
 ## Animation du skateur
 
-Le personnage a un petit squelette procédural (torse, tête, bras et
-jambes articulés) animé selon l'état du jeu, dans `animatePlayer()` :
+Le personnage a un squelette procédural avec de vraies articulations à
+deux segments par membre — épaule + coude pour les bras, hanche + genou
+pour les jambes (`createLimbChain()`) — animé selon l'état du jeu dans
+`animatePlayer()` :
 
-- **En train de rouler** : les jambes pompent en alternance (vitesse du
-  mouvement liée à la vitesse du skateur) et les bras balancent en
-  opposition.
-- **En l'air (ollie)** : jambes repliées, bras levés/écartés pour
-  l'équilibre.
-- **En grind** : position accroupie, bras tendus à l'horizontale de
-  chaque côté.
+- **En train de rouler** : les hanches pompent en alternance (vitesse
+  liée à la vitesse du skateur), les genoux plient davantage du côté
+  qui recule, et les bras balancent en opposition.
+- **En l'air (ollie)** : hanches et genoux repliés (jambes tuckées),
+  bras levés/écartés aux épaules et coudes légèrement pliés.
+- **En grind** : position accroupie (hanches + genoux bien pliés),
+  bras tendus à l'horizontale de chaque côté pour l'équilibre.
 
-Les transitions sont amorties (lerp) pour rester fluides d'un état à
+Chaque articulation (hanche, genou, épaule, coude) est un `THREE.Group`
+pivot imbriqué dans le précédent, comme un mini rig ; toutes les
+transitions sont amorties (lerp) pour rester fluides d'un état à
 l'autre plutôt que de changer de pose brutalement.
 
 ## Contrôles

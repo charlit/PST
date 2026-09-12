@@ -43,10 +43,12 @@ const COLORS = {
 // ----------------------------- État global -----------------------------
 let scene, camera, renderer, clock;
 let player, board;
-let torso, leftLeg, rightLeg, leftArm, rightArm;
+let torso, leftLeg, rightLeg, leftArm, rightArm; // leftLeg/rightLeg/leftArm/rightArm = { root, joint }
 const anim = {
   rollPhase: 0,
-  legL: 0, legR: 0, armL: 0, armR: 0, armLz: 0, armRz: 0, // valeurs courantes (amorties)
+  // Valeurs courantes (amorties) de chaque articulation.
+  hipL: 0, hipR: 0, kneeL: 0.15, kneeR: 0.15,
+  armSwingL: 0, armSwingR: 0, armOutL: 0.2, armOutR: -0.2, elbowL: 0.35, elbowR: 0.35,
 };
 let rideableMeshes = [];
 let grindRails = []; // { a: Vector3, b: Vector3 } (y déjà inclus dans a/b)
@@ -495,9 +497,11 @@ function addGrindRail(a, b, color = COLORS.metalLight) {
 }
 
 // ----------------------------- Le skateur -----------------------------
-// Squelette simple à la main (pas de vrai rig/armature) : chaque membre est
-// un petit groupe pivoté à son articulation (épaule/hanche), tourné chaque
-// frame selon l'état du joueur (roule / saute / grinde) dans animatePlayer().
+// Squelette procédural à deux segments par membre (épaule+coude pour les
+// bras, hanche+genou pour les jambes) : chaque articulation est un
+// THREE.Group pivot imbriqué dans le précédent, comme un vrai rig simplifié.
+// Voir createLimbChain() pour la construction et animatePlayer() pour les
+// poses (roule / en l'air / grind).
 function buildPlayer() {
   player = new THREE.Group();
 
@@ -509,23 +513,35 @@ function buildPlayer() {
   head.position.y = 1.48;
   player.add(head);
 
-  // Jambes : pivot en haut (hanche), le membre pend vers le bas par défaut.
-  leftLeg = createLimb(0.11, 0.6, COLORS.metalDark);
-  leftLeg.position.set(-0.13, 0.62, 0);
-  player.add(leftLeg);
+  // Jambes : hanche -> cuisse -> genou -> mollet -> pied.
+  leftLeg = createLimbChain({
+    upperLen: 0.34, upperRadius: 0.11, lowerLen: 0.32, lowerRadius: 0.09,
+    limbColor: COLORS.metalDark, capColor: COLORS.neonRed, capShape: "shoe",
+  });
+  leftLeg.root.position.set(-0.14, 0.62, 0);
+  player.add(leftLeg.root);
 
-  rightLeg = createLimb(0.11, 0.6, COLORS.metalDark);
-  rightLeg.position.set(0.13, 0.62, 0);
-  player.add(rightLeg);
+  rightLeg = createLimbChain({
+    upperLen: 0.34, upperRadius: 0.11, lowerLen: 0.32, lowerRadius: 0.09,
+    limbColor: COLORS.metalDark, capColor: COLORS.neonRed, capShape: "shoe",
+  });
+  rightLeg.root.position.set(0.14, 0.62, 0);
+  player.add(rightLeg.root);
 
-  // Bras : pivot en haut (épaule).
-  leftArm = createLimb(0.08, 0.5, 0xffe3c2);
-  leftArm.position.set(-0.32, 1.18, 0);
-  player.add(leftArm);
+  // Bras : épaule -> bras -> coude -> avant-bras -> main.
+  leftArm = createLimbChain({
+    upperLen: 0.28, upperRadius: 0.075, lowerLen: 0.26, lowerRadius: 0.065,
+    limbColor: COLORS.metalDark, capColor: 0xffe3c2, capShape: "hand",
+  });
+  leftArm.root.position.set(-0.32, 1.2, 0);
+  player.add(leftArm.root);
 
-  rightArm = createLimb(0.08, 0.5, 0xffe3c2);
-  rightArm.position.set(0.32, 1.18, 0);
-  player.add(rightArm);
+  rightArm = createLimbChain({
+    upperLen: 0.28, upperRadius: 0.075, lowerLen: 0.26, lowerRadius: 0.065,
+    limbColor: COLORS.metalDark, capColor: 0xffe3c2, capShape: "hand",
+  });
+  rightArm.root.position.set(0.32, 1.2, 0);
+  player.add(rightArm.root);
 
   board = toonMesh(new THREE.BoxGeometry(0.5, 0.08, 1.7), COLORS.neonRed);
   board.position.y = 0.24;
@@ -534,57 +550,105 @@ function buildPlayer() {
   scene.add(player);
 }
 
-// Crée un membre (bras/jambe) : un groupe pivot + un mesh décalé vers le bas,
-// pour que la rotation du groupe agisse comme une charnière à l'articulation.
-function createLimb(radius, length, color) {
-  const pivot = new THREE.Group();
-  const mesh = toonMesh(new THREE.CylinderGeometry(radius, radius * 0.85, length, 8), color);
-  mesh.position.y = -length / 2;
-  pivot.add(mesh);
-  return pivot;
+// Construit une chaîne à 2 segments (bras ou jambe) : un pivot "root" à
+// l'articulation supérieure (épaule/hanche) contenant le segment supérieur,
+// puis un pivot "joint" à l'articulation inférieure (coude/genou) contenant
+// le segment inférieur + une extrémité (main/pied). root et joint tournent
+// indépendamment dans animatePlayer() pour un mouvement à deux charnières.
+function createLimbChain({ upperLen, upperRadius, lowerLen, lowerRadius, limbColor, capColor, capShape }) {
+  const root = new THREE.Group();
+  const upperMesh = toonMesh(
+    new THREE.CylinderGeometry(upperRadius, upperRadius * 0.85, upperLen, 8),
+    limbColor
+  );
+  upperMesh.position.y = -upperLen / 2;
+  root.add(upperMesh);
+
+  const joint = new THREE.Group();
+  joint.position.y = -upperLen;
+  root.add(joint);
+
+  const lowerMesh = toonMesh(
+    new THREE.CylinderGeometry(lowerRadius, lowerRadius * 0.8, lowerLen, 8),
+    limbColor
+  );
+  lowerMesh.position.y = -lowerLen / 2;
+  joint.add(lowerMesh);
+
+  const cap =
+    capShape === "shoe"
+      ? toonMesh(new THREE.BoxGeometry(0.16, 0.09, 0.26), capColor)
+      : toonMesh(new THREE.SphereGeometry(lowerRadius * 1.2, 8, 8), capColor);
+  cap.position.y = -lowerLen - (capShape === "shoe" ? 0.02 : 0);
+  if (capShape === "shoe") cap.position.z = 0.05;
+  joint.add(cap);
+
+  return { root, joint };
 }
 
 // Anime le squelette selon l'état courant : roule / en l'air / grind.
+// Chaque membre a 2 cibles : la rotation à l'épaule/hanche (root) et celle
+// au coude/genou (joint), amorties (lerp) pour des transitions fluides.
 function animatePlayer(dt) {
-  let targetLegL = 0, targetLegR = 0, targetArmL = 0, targetArmR = 0;
-  let targetArmLz = 0.15, targetArmRz = -0.15; // légèrement écartés par défaut
+  let hipL = 0, hipR = 0, kneeL = 0.15, kneeR = 0.15;
+  let armSwingL = 0, armSwingR = 0, elbowL = 0.35, elbowR = 0.35;
+  let armOutL = 0.2, armOutR = -0.2; // écartement latéral des bras (épaule)
 
   if (state.grinding) {
-    // Position accroupie, bras écartés à l'horizontale pour l'équilibre.
-    targetLegL = targetLegR = 0.55;
-    targetArmLz = 1.3;
-    targetArmRz = -1.3;
+    // Position accroupie, bras tendus à l'horizontale pour l'équilibre.
+    hipL = hipR = 0.5;
+    kneeL = kneeR = 0.95;
+    armOutL = 1.35;
+    armOutR = -1.35;
+    elbowL = elbowR = 0.1;
   } else if (!state.grounded) {
-    // En l'air : jambes repliées, bras levés/écartés.
-    targetLegL = targetLegR = 0.95;
-    targetArmLz = 1.0;
-    targetArmRz = -1.0;
+    // En l'air : jambes repliées (genoux remontés), bras levés/écartés.
+    hipL = hipR = 0.85;
+    kneeL = kneeR = 1.35;
+    armOutL = 1.05;
+    armOutR = -1.05;
+    elbowL = elbowR = 0.5;
   } else {
-    // Au sol, en train de rouler : jambes qui pompent alternativement.
+    // Au sol, en train de rouler : jambes qui pompent alternativement,
+    // genoux qui plient davantage quand la hanche recule.
     anim.rollPhase += Math.abs(state.speed) * dt * 2.2;
-    const swing = Math.sin(anim.rollPhase) * Math.min(Math.abs(state.speed) / MAX_SPEED, 1) * 0.35;
-    targetLegL = 0.15 + swing;
-    targetLegR = 0.15 - swing;
-    targetArmL = -swing * 0.7;
-    targetArmR = swing * 0.7;
+    const amp = Math.min(Math.abs(state.speed) / MAX_SPEED, 1);
+    const swing = Math.sin(anim.rollPhase) * amp * 0.3;
+    hipL = 0.1 + swing;
+    hipR = 0.1 - swing;
+    kneeL = 0.25 + Math.max(-swing, 0) * 1.4;
+    kneeR = 0.25 + Math.max(swing, 0) * 1.4;
+    armSwingL = -swing * 0.8;
+    armSwingR = swing * 0.8;
   }
 
   // Amortissement : on interpole doucement vers la cible pour éviter les
   // à-coups quand on change d'état (ollie, atterrissage, grind...).
   const damp = 1 - Math.pow(0.001, dt);
-  anim.legL += (targetLegL - anim.legL) * damp;
-  anim.legR += (targetLegR - anim.legR) * damp;
-  anim.armL += (targetArmL - anim.armL) * damp;
-  anim.armR += (targetArmR - anim.armR) * damp;
-  anim.armLz += (targetArmLz - anim.armLz) * damp;
-  anim.armRz += (targetArmRz - anim.armRz) * damp;
+  const lerp = (key, target) => (anim[key] += (target - anim[key]) * damp);
 
-  leftLeg.rotation.x = anim.legL;
-  rightLeg.rotation.x = anim.legR;
-  leftArm.rotation.x = anim.armL;
-  rightArm.rotation.x = anim.armR;
-  leftArm.rotation.z = anim.armLz;
-  rightArm.rotation.z = anim.armRz;
+  lerp("hipL", hipL);
+  lerp("hipR", hipR);
+  lerp("kneeL", kneeL);
+  lerp("kneeR", kneeR);
+  lerp("armSwingL", armSwingL);
+  lerp("armSwingR", armSwingR);
+  lerp("armOutL", armOutL);
+  lerp("armOutR", armOutR);
+  lerp("elbowL", elbowL);
+  lerp("elbowR", elbowR);
+
+  leftLeg.root.rotation.x = anim.hipL;
+  rightLeg.root.rotation.x = anim.hipR;
+  leftLeg.joint.rotation.x = anim.kneeL;
+  rightLeg.joint.rotation.x = anim.kneeR;
+
+  leftArm.root.rotation.x = anim.armSwingL;
+  rightArm.root.rotation.x = anim.armSwingR;
+  leftArm.root.rotation.z = anim.armOutL;
+  rightArm.root.rotation.z = anim.armOutR;
+  leftArm.joint.rotation.x = anim.elbowL;
+  rightArm.joint.rotation.x = anim.elbowR;
 }
 
 // ----------------------------- Boucle de jeu -----------------------------
