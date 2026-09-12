@@ -38,14 +38,57 @@ const state = {
 
 const keys = {};
 
+// ----------------------------- Style cartoon (toon shading + contours) -----------------------------
+let toonGradient = null;
+
+function getToonGradient() {
+  if (toonGradient) return toonGradient;
+  const canvas = document.createElement("canvas");
+  canvas.width = 4;
+  canvas.height = 1;
+  const ctx = canvas.getContext("2d");
+  // 4 bandes de lumière franches, façon cel-shading
+  const shades = [90, 150, 205, 255];
+  shades.forEach((v, i) => {
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(i, 0, 1, 1);
+  });
+  toonGradient = new THREE.CanvasTexture(canvas);
+  toonGradient.magFilter = THREE.NearestFilter;
+  toonGradient.minFilter = THREE.NearestFilter;
+  toonGradient.generateMipmaps = false;
+  return toonGradient;
+}
+
+function toonMat(color, extra) {
+  return new THREE.MeshToonMaterial(Object.assign({ color, gradientMap: getToonGradient() }, extra));
+}
+
+// Ajoute un contour noir façon bande-dessinée autour d'un mesh (silhouette figée dans sa géométrie).
+function addOutline(mesh, color = 0x1a1a2e) {
+  const edges = new THREE.EdgesGeometry(mesh.geometry, 28);
+  const outline = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color }));
+  mesh.add(outline);
+  return mesh;
+}
+
+// Raccourci : crée un mesh avec matériau toon + ombres + contour, prêt à ajouter à la scène.
+function toonMesh(geometry, color, extra) {
+  const mesh = new THREE.Mesh(geometry, toonMat(color, extra));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  addOutline(mesh);
+  return mesh;
+}
+
 // ----------------------------- Init -----------------------------
 init();
 animate();
 
 function init() {
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b0e14);
-  scene.fog = new THREE.Fog(0x0b0e14, 25, 70);
+  scene.background = new THREE.Color(0x8fd6ff);
+  scene.fog = new THREE.Fog(0x8fd6ff, 35, 85);
 
   camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 200);
 
@@ -78,10 +121,10 @@ function onResize() {
 
 // ----------------------------- Décor : le hangar -----------------------------
 function buildLights() {
-  const ambient = new THREE.AmbientLight(0x8899aa, 0.55);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.75);
   scene.add(ambient);
 
-  const sun = new THREE.DirectionalLight(0xfff4dd, 1.1);
+  const sun = new THREE.DirectionalLight(0xfff8e7, 1.15);
   sun.position.set(20, 30, 10);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -91,57 +134,43 @@ function buildLights() {
   sun.shadow.camera.bottom = -40;
   scene.add(sun);
 
-  const fill = new THREE.PointLight(0x38bdf8, 0.4, 60);
+  const fill = new THREE.PointLight(0xffd166, 0.35, 60);
   fill.position.set(-15, 12, -15);
   scene.add(fill);
 }
 
 function buildHangar() {
-  // Sol du hangar (plaza en béton)
-  const floorMat = new THREE.MeshStandardMaterial({ color: 0x8b8f96, roughness: 0.95 });
+  // Sol : une plaza ovale couleur béton clair, entourée de gazon, façon skatepark
+  // de plein air (texture peinte procéduralement sur un canvas).
+  const floorTexture = createFloorTexture();
+  const floorMat = new THREE.MeshToonMaterial({ map: floorTexture, gradientMap: getToonGradient() });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2, HALF_L * 2), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   scene.add(floor);
   rideableMeshes.push(floor);
 
-  // Marquages au sol (juste esthétique)
-  const lineMat = new THREE.MeshBasicMaterial({ color: 0x6b7280 });
-  for (let i = -HALF_L + 4; i < HALF_L; i += 8) {
-    const line = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2 - 2, 0.15), lineMat);
-    line.rotation.x = -Math.PI / 2;
-    line.position.set(0, 0.01, i);
-    scene.add(line);
-  }
-
-  // Murs latéraux (tôle de hangar)
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x2b3542, roughness: 0.8, metalness: 0.3 });
+  // Structure de hangar ouverte façon auvent : juste les poteaux/arches, pas de
+  // murs pleins, pour laisser le ciel et le décor cartoon bien visibles.
+  const beamMat = toonMat(0xffffff);
   const wallHeight = 14;
-  [-HALF_W, HALF_W].forEach((x) => {
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.6, wallHeight, HALF_L * 2), wallMat);
-    wall.position.set(x, wallHeight / 2, 0);
-    wall.castShadow = true;
-    wall.receiveShadow = true;
-    scene.add(wall);
-  });
-
-  // Mur du fond (le hangar est ouvert côté +Z pour laisser entrer la lumière)
-  const backWall = new THREE.Mesh(new THREE.BoxGeometry(HALF_W * 2, wallHeight, 0.6), wallMat);
-  backWall.position.set(0, wallHeight / 2, -HALF_L);
-  backWall.castShadow = true;
-  backWall.receiveShadow = true;
-  scene.add(backWall);
-
-  // Arches du toit (structure façon hangar industriel)
-  const beamMat = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.6, metalness: 0.6 });
-  const archCount = 9;
+  const archCount = 7;
   for (let i = 0; i <= archCount; i++) {
     const z = -HALF_L + (i / archCount) * HALF_L * 2;
+
+    // Poteaux verticaux de chaque côté
+    [-HALF_W, HALF_W].forEach((x) => {
+      const post = toonMesh(new THREE.CylinderGeometry(0.35, 0.35, wallHeight, 10), 0xffd166);
+      post.position.set(x, wallHeight / 2, z);
+      scene.add(post);
+    });
+
+    // Arche du toit (ligne fine, purement décorative)
     const archShape = new THREE.Shape();
     const segs = 16;
     for (let s = 0; s <= segs; s++) {
       const t = s / segs;
-      const ang = Math.PI * t; // 0..PI
+      const ang = Math.PI * t;
       const x = -Math.cos(ang) * HALF_W;
       const y = wallHeight + Math.sin(ang) * 9;
       if (s === 0) archShape.moveTo(x, y);
@@ -151,16 +180,16 @@ function buildHangar() {
     const archGeom = new THREE.BufferGeometry().setFromPoints(
       points.map((p) => new THREE.Vector3(p.x, p.y, 0))
     );
-    const arch = new THREE.Line(archGeom, new THREE.LineBasicMaterial({ color: 0x9ca3af }));
+    const arch = new THREE.Line(archGeom, new THREE.LineBasicMaterial({ color: 0xff9f1c, linewidth: 2 }));
     arch.position.z = z;
     scene.add(arch);
   }
 
-  // Panneau de toit semi-transparent (laisse deviner la lumière du jour)
-  const roofMat = new THREE.MeshStandardMaterial({
-    color: 0x1e293b,
+  // Toit très légèrement teinté, surtout pour l'ombrage — le ciel cartoon reste visible
+  const roofMat = new THREE.MeshBasicMaterial({
+    color: 0xbfeaff,
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.22,
     side: THREE.DoubleSide,
   });
   const roof = new THREE.Mesh(new THREE.CylinderGeometry(HALF_W, HALF_W, HALF_L * 2, 24, 1, true, 0, Math.PI), roofMat);
@@ -168,78 +197,146 @@ function buildHangar() {
   roof.rotation.y = Math.PI / 2;
   roof.position.set(0, wallHeight, 0);
   scene.add(roof);
+
+  buildBackgroundScenery();
 }
 
-// ----------------------------- Skatepark (inspiré du park d'Anglet) -----------------------------
+// Peint la plaza (ovale crème) + le gazon environnant + la bordure sur un canvas,
+// utilisé comme texture du sol — évite les faux-raccords entre plusieurs meshes.
+function createFloorTexture() {
+  const pxPerUnit = 10;
+  const w = HALF_W * 2 * pxPerUnit;
+  const h = HALF_L * 2 * pxPerUnit;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+
+  // Gazon
+  ctx.fillStyle = "#7ed957";
+  ctx.fillRect(0, 0, w, h);
+  // Petites touches d'herbe plus foncées (esthétique cartoon)
+  ctx.fillStyle = "#6bc945";
+  for (let i = 0; i < 260; i++) {
+    const rx = Math.random() * w;
+    const ry = Math.random() * h;
+    ctx.fillRect(rx, ry, 14, 3);
+  }
+
+  // Bordure de la plaza (terracotta) puis plaza crème par-dessus
+  const cx = w / 2;
+  const cy = h / 2;
+  const rx = HALF_W * pxPerUnit - 55; // marge d'herbe bien visible sur les côtés
+  const ry = HALF_L * pxPerUnit - 70; // idem aux deux extrémités
+
+  ctx.fillStyle = "#e07856";
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx + 14, ry + 14, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#f2e3c6";
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = 4;
+  return texture;
+}
+
+// Décor lointain visible à travers l'ouverture du hangar : quelques collines,
+// arbres et immeubles stylisés en fond, façon paysage de bord de mer cartoon.
+function buildBackgroundScenery() {
+  const treeMat = toonMat(0x2f9e44);
+  const trunkMat = toonMat(0x8a5a3b);
+  for (let i = 0; i < 10; i++) {
+    const x = (Math.random() - 0.5) * (HALF_W * 2 + 30);
+    const z = -HALF_L - 15 - Math.random() * 20;
+    const scale = 0.8 + Math.random() * 0.9;
+
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 2 * scale, 6), trunkMat);
+    trunk.position.set(x, scale, z);
+    scene.add(trunk);
+
+    const foliage = toonMesh(new THREE.SphereGeometry(1.4 * scale, 8, 8), 0x2f9e44);
+    foliage.position.set(x, 2.6 * scale, z);
+    scene.add(foliage);
+  }
+
+  const buildingMat = [0xf1f5f9, 0xffc971, 0xff9f9f];
+  for (let i = 0; i < 5; i++) {
+    const x = (Math.random() - 0.5) * (HALF_W * 2 + 10);
+    const z = -HALF_L - 25 - Math.random() * 15;
+    const height = 5 + Math.random() * 6;
+    const building = toonMesh(
+      new THREE.BoxGeometry(4 + Math.random() * 2, height, 4),
+      buildingMat[i % buildingMat.length]
+    );
+    building.position.set(x, height / 2, z);
+    scene.add(building);
+  }
+}
+
+// ----------------------------- Skatepark (inspiré du park d'Anglet, style cartoon) -----------------------------
 function buildSkatepark() {
-  const rampMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.9 });
-  const woodMat = new THREE.MeshStandardMaterial({ color: 0xb08d57, roughness: 0.85 });
-  const railMat = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.3, metalness: 0.8 });
+  // Pyramide centrale (hip à 4 pans) avec rail sur l'arête du sommet — la pièce
+  // signature du park d'Anglet, ici en jaune vif façon dessin animé.
+  const pyramidTop = 1.6;
+  const pyramidHeight = 2.2;
+  const pyramidCenter = new THREE.Vector3(0, 0, -6);
+  const pyramid = createPyramidHip(5, pyramidTop, pyramidHeight, 0xffd23f);
+  pyramid.position.copy(pyramidCenter);
+  scene.add(pyramid);
+  rideableMeshes.push(pyramid);
 
-  // Deux quarter-pipes qui se font face aux extrémités de la plaza
-  const qp1 = createQuarterPipe(4.2, 14, rampMat);
-  qp1.position.set(0, 0, -24);
-  scene.add(qp1);
-  rideableMeshes.push(qp1);
-
-  const qp2 = createQuarterPipe(4.2, 14, rampMat);
-  qp2.rotation.y = Math.PI;
-  qp2.position.set(0, 0, 20);
-  scene.add(qp2);
-  rideableMeshes.push(qp2);
-
-  // Funbox central avec rail à grinder et escalier d'accès
-  const funboxHeight = 1.3;
-  const funbox = new THREE.Mesh(new THREE.BoxGeometry(5, funboxHeight, 8), woodMat);
-  funbox.position.set(-9, funboxHeight / 2, -2);
-  funbox.castShadow = true;
-  funbox.receiveShadow = true;
-  scene.add(funbox);
-  rideableMeshes.push(funbox);
-
+  // Rail le long de l'arête du sommet qui fait face au spawn (+Z), pour une
+  // ligne d'approche naturelle en arrivant depuis le départ.
+  const apothem = (pyramidTop / 2) * Math.cos(Math.PI / 4);
+  const railY = pyramidHeight + 0.1;
+  const railZ = pyramidCenter.z + apothem;
   addGrindRail(
-    new THREE.Vector3(-9 - 2.5, funboxHeight + 0.12, -6),
-    new THREE.Vector3(-9 - 2.5, funboxHeight + 0.12, 2),
-    railMat
+    new THREE.Vector3(pyramidCenter.x - apothem, railY, railZ),
+    new THREE.Vector3(pyramidCenter.x + apothem, railY, railZ)
   );
 
-  buildStairs(new THREE.Vector3(-9, 0, 3.2), funboxHeight, woodMat);
+  // Quarter-pipe teal côté gauche
+  const qpLeft = createQuarterPipe(3.4, 7, 0x2ec4b6);
+  qpLeft.rotation.y = Math.PI / 2;
+  qpLeft.position.set(-16, 0, -16);
+  scene.add(qpLeft);
+  rideableMeshes.push(qpLeft);
 
-  // Curbs / rails grindables le long des deux bords de la plaza
-  const curbHeight = 0.45;
-  [-20, 20].forEach((x) => {
-    const curb = new THREE.Mesh(new THREE.BoxGeometry(1, curbHeight, 30), rampMat);
-    curb.position.set(x, curbHeight / 2, -2);
-    curb.castShadow = true;
-    curb.receiveShadow = true;
-    scene.add(curb);
-    rideableMeshes.push(curb);
+  // Rampe banque (wedge) orange côté droit
+  const wedgeRight = createWedgeRamp(3.2, 3.2, 7, 0xff9f1c);
+  wedgeRight.rotation.y = -Math.PI / 2;
+  wedgeRight.position.set(15, 0, -15);
+  scene.add(wedgeRight);
+  rideableMeshes.push(wedgeRight);
 
-    addGrindRail(
-      new THREE.Vector3(x, curbHeight + 0.1, -16.5),
-      new THREE.Vector3(x, curbHeight + 0.1, 12.5),
-      railMat
-    );
-  });
+  // Quarter-pipe rose près du spawn, pour prendre de l'air en arrivant
+  const qpSpawn = createQuarterPipe(3.6, 8, 0xff6f91);
+  qpSpawn.rotation.y = Math.PI;
+  qpSpawn.position.set(0, 0, 18);
+  scene.add(qpSpawn);
+  rideableMeshes.push(qpSpawn);
 
-  // Petit ledge + rail supplémentaire côté droit, pour varier les lignes
+  // Rail isolé sur pieds métalliques (comme le rail "table" vu sur les photos)
+  buildStandaloneRail(new THREE.Vector3(-9, 0, 6), new THREE.Vector3(-2, 0, 6));
+
+  // Petit ledge bas à droite, pour varier les lignes de grind
   const ledgeHeight = 0.55;
-  const ledge = new THREE.Mesh(new THREE.BoxGeometry(7, ledgeHeight, 1.4), rampMat);
+  const ledge = toonMesh(new THREE.BoxGeometry(7, ledgeHeight, 1.4), 0xff9f9f);
   ledge.position.set(9, ledgeHeight / 2, 8);
-  ledge.castShadow = true;
-  ledge.receiveShadow = true;
   scene.add(ledge);
   rideableMeshes.push(ledge);
-
   addGrindRail(
     new THREE.Vector3(5.6, ledgeHeight + 0.1, 8),
-    new THREE.Vector3(12.4, ledgeHeight + 0.1, 8),
-    railMat
+    new THREE.Vector3(12.4, ledgeHeight + 0.1, 8)
   );
 }
 
-// Génère une rampe "quarter-pipe" par extrusion d'un profil courbe (transition tangente au sol).
-function createQuarterPipe(radius, width, material) {
+// Rampe "quarter-pipe" par extrusion d'un profil courbe (transition tangente au sol).
+function createQuarterPipe(radius, width, color) {
   const backDepth = 0.6;
   const segs = 14;
   const shape = new THREE.Shape();
@@ -255,35 +352,55 @@ function createQuarterPipe(radius, width, material) {
 
   const geom = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: false });
   geom.translate(-radius / 2, 0, -width / 2); // centre la géométrie
-  const mesh = new THREE.Mesh(geom, material);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
+  return toonMesh(geom, color);
+}
+
+// Rampe "banque" simple (plan incliné droit), pour varier avec les quarter-pipes courbes.
+function createWedgeRamp(radius, height, width, color) {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  shape.lineTo(radius, height);
+  shape.lineTo(radius, 0);
+  shape.lineTo(0, 0);
+
+  const geom = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: false });
+  geom.translate(-radius / 2, 0, -width / 2);
+  return toonMesh(geom, color);
+}
+
+// Pyramide/hip à 4 pans plats (frustum carré) avec un petit plateau au sommet.
+function createPyramidHip(baseSize, topSize, height, color) {
+  const geom = new THREE.CylinderGeometry(topSize / 2, baseSize / 2, height, 4, 1, false);
+  geom.translate(0, height / 2, 0); // pose la base au sol (y=0) au lieu d'être centrée
+  const mesh = toonMesh(geom, color);
+  mesh.rotation.y = Math.PI / 4; // aligne les faces plates sur les axes X/Z
   return mesh;
 }
 
-function buildStairs(base, totalHeight, material) {
-  const steps = 5;
-  const stepH = totalHeight / steps;
-  const stepD = 0.55;
-  for (let i = 0; i < steps; i++) {
-    const step = new THREE.Mesh(new THREE.BoxGeometry(3, stepH * (i + 1), stepD), material);
-    step.position.set(base.x, (stepH * (i + 1)) / 2, base.z + i * stepD);
-    step.castShadow = true;
-    step.receiveShadow = true;
-    scene.add(step);
-    rideableMeshes.push(step);
-  }
+function buildStandaloneRail(a, b) {
+  const railHeight = 0.9;
+
+  // Deux pieds façon tréteau, aux extrémités
+  [a, b].forEach((p) => {
+    const leg = toonMesh(new THREE.BoxGeometry(0.18, railHeight, 0.5), 0x3a3a3a);
+    leg.position.set(p.x, railHeight / 2, p.z);
+    scene.add(leg);
+  });
+
+  addGrindRail(
+    new THREE.Vector3(a.x, railHeight, a.z),
+    new THREE.Vector3(b.x, railHeight, b.z)
+  );
 }
 
-function addGrindRail(a, b, material) {
+function addGrindRail(a, b, color = 0xf1f5f9) {
   const dir = new THREE.Vector3().subVectors(b, a);
   const len = dir.length();
   const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
 
-  const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, len, 8), material);
+  const rail = toonMesh(new THREE.CylinderGeometry(0.08, 0.08, len, 8), color);
   rail.position.copy(mid);
   rail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
-  rail.castShadow = true;
   scene.add(rail);
 
   grindRails.push({ a: a.clone(), b: b.clone() });
@@ -293,22 +410,16 @@ function addGrindRail(a, b, material) {
 function buildPlayer() {
   player = new THREE.Group();
 
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8 });
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 1.0, 10), bodyMat);
+  const body = toonMesh(new THREE.CylinderGeometry(0.28, 0.28, 1.0, 10), 0x38bdf8);
   body.position.y = 0.75;
-  body.castShadow = true;
   player.add(body);
 
-  const headMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9 });
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), headMat);
+  const head = toonMesh(new THREE.SphereGeometry(0.24, 10, 10), 0xffe3c2);
   head.position.y = 1.4;
-  head.castShadow = true;
   player.add(head);
 
-  const boardMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9 });
-  board = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 1.7), boardMat);
+  board = toonMesh(new THREE.BoxGeometry(0.5, 0.08, 1.7), 0xff5d5d);
   board.position.y = 0.24;
-  board.castShadow = true;
   player.add(board);
 
   scene.add(player);

@@ -1,13 +1,17 @@
 # SkateHangar
 
-Jeu de skate 3D dans le navigateur, façon Tony Hawk's Pro Skater, sur
-une carte : un hangar industriel abritant un skatepark inspiré du
-[skatepark de la Barre à Anglet (64)](https://www.jackspots.fr/2012/09/anglet-64.html)
-(quarter-pipes qui se font face, funbox central avec rail et escalier,
-curbs tout autour, ledge additionnel).
+Jeu de skate 3D dans le navigateur, façon Tony Hawk's Pro Skater, dans
+un style cartoon (toon shading + contours noirs). La carte reprend
+l'agencement du [skatepark de la Barre à Anglet (64)](https://www.jackspots.fr/2012/09/anglet-64.html) :
+une plaza ovale bordée de gazon, une pyramide/hip centrale avec rail
+sur l'arête, des quarter-pipes et une rampe banque dispersées autour,
+un rail isolé sur pieds métalliques, et un ledge additionnel — le tout
+sous un hangar ouvert avec un peu de décor (arbres, immeubles) visible
+au loin.
 
-Construit avec [Three.js](https://threejs.org/) (r128) + un petit
-serveur Express pour servir les fichiers statiques.
+Construit avec [Three.js](https://threejs.org/) (r128, `MeshToonMaterial`
++ contours via `EdgesGeometry`) + un petit serveur Express pour servir
+les fichiers statiques.
 
 ## Lancer le jeu en local
 
