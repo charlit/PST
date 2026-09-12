@@ -1,0 +1,9 @@
+services:
+  skatehangar:
+    build: .
+    container_name: skatehangar
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
