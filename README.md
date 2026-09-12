@@ -58,32 +58,30 @@ SkateHangar/
 Même principe que pour TrashGO, sur un port différent (8081) pour que
 les deux jeux tournent en même temps sur le Mac mini.
 
-### 1. Transférer le dossier sur le Mac mini
+### 1. Récupérer le code sur le Mac mini
 
-Depuis ce PC :
+En SSH sur le Mac mini (`ssh jussan@games-carlitos.tail736807.ts.net`) :
 
 ```bash
-scp -r C:\Users\lesma\Github\SkateHangar jussan@mac-mini-de-jussan.tail736807.ts.net:~/
+git clone https://github.com/charlit/PST.git SkateHangar
+cd SkateHangar
 ```
-
-(ou récupère directement le dépôt GitHub sur le Mac mini avec
-`git clone https://github.com/charlit/PST.git SkateHangar`)
 
 ### 2. Lancer le serveur avec Docker
 
-En SSH sur le Mac mini :
-
 ```bash
-ssh jussan@mac-mini-de-jussan.tail736807.ts.net
-cd SkateHangar
 colima start --vm-type=vz   # si Colima n'est pas déjà démarré
-docker compose up -d --build
+docker-compose up -d --build
 ```
+
+> Sur ce Mac mini, c'est la commande `docker-compose` (avec un tiret)
+> qui est installée, pas le plugin `docker compose` intégré — utilise
+> bien cette syntaxe.
 
 Vérifie que ça tourne :
 
 ```bash
-docker compose logs -f
+docker-compose logs -f
 ```
 
 Tu dois voir `SkateHangar, écoute sur le port 8081`. Teste en local sur
@@ -97,16 +95,18 @@ curl -I http://localhost:8081
 
 TrashGO utilise déjà le port HTTPS 443 par défaut sur Tailscale
 Funnel. Pour SkateHangar, on expose un deuxième port HTTPS (8443) sur
-la même adresse Tailscale :
+la même adresse Tailscale. Sur ce Mac mini, Tailscale est installé via
+l'app macOS (pas de commande `tailscale` dans le PATH de `sudo`), donc
+il faut passer par le chemin complet :
 
 ```bash
-sudo tailscale funnel --bg --https=8443 8081
+sudo /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --bg --https=8443 8081
 ```
 
 Tailscale affiche alors une URL du style :
 
 ```
-https://mac-mini-de-jussan.tail736807.ts.net:8443/
+https://games-carlitos.tail736807.ts.net:8443/
 ```
 
 **C'est cette adresse que tu partages** pour SkateHangar (à ne pas
@@ -115,17 +115,45 @@ confondre avec l'URL de TrashGO en 443).
 Vérifie l'état de tous les partages actifs :
 
 ```bash
-sudo tailscale funnel status
+sudo /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel status
 ```
 
-### 4. Mettre à jour le jeu plus tard
+Pour couper ce partage :
 
 ```bash
-ssh jussan@mac-mini-de-jussan.tail736807.ts.net "cd SkateHangar && git pull && docker compose up -d --build"
+sudo /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=8443 off
 ```
 
-(si tu as cloné le dépôt Git sur le Mac mini plutôt que transféré via
-scp)
+### 4. Mettre à jour le jeu manuellement
+
+Sur le Mac mini, dans le dossier `~/SkateHangar` :
+
+```bash
+git pull
+docker-compose up -d --build
+```
+
+## Déploiement automatique (à chaque push GitHub)
+
+Le script [`deploy/watch-deploy.sh`](deploy/watch-deploy.sh) vérifie
+s'il y a du nouveau code sur GitHub et, si oui, fait `git pull` +
+reconstruit le conteneur Docker automatiquement. Pour l'activer sur le
+Mac mini :
+
+```bash
+chmod +x ~/SkateHangar/deploy/watch-deploy.sh
+crontab -e
+```
+
+Ajoute cette ligne (vérifie toutes les 5 minutes) puis sauvegarde :
+
+```
+*/5 * * * * /bin/bash /Users/jussan/SkateHangar/deploy/watch-deploy.sh
+```
+
+Les logs du script sont dans `deploy/watch-deploy.log`. Avec ça,
+chaque `git push` sur `master` est automatiquement répercuté sur le
+Mac mini dans les 5 minutes qui suivent — sans rien faire de plus.
 
 ## Idées d'améliorations
 
