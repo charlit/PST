@@ -1,0 +1,13 @@
+{
+  "name": "skatehangar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SkateHangar - jeu de skate 3D façon Tony Hawk's Pro Skater, carte du hangar",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

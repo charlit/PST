@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SkateHangar</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #0b0e14;
+    color: #f1f5f9;
+    font-family: system-ui, sans-serif;
+  }
+  #ui {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 10;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    user-select: none;
+  }
+  #ui .score { font-size: 2em; font-weight: 700; }
+  #ui .combo { font-size: 1.1em; color: #38bdf8; min-height: 1.4em; }
+  #ui .timer { font-size: 1.3em; margin-top: 4px; }
+  #help {
+    position: fixed;
+    bottom: 12px;
+    left: 12px;
+    z-index: 10;
+    font-size: 0.85em;
+    line-height: 1.5;
+    background: rgba(15, 23, 42, 0.55);
+    padding: 10px 14px;
+    border-radius: 8px;
+    user-select: none;
+  }
+  #banner {
+    position: fixed;
+    top: 40%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2.2em;
+    font-weight: 800;
+    color: #facc15;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.9);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s, transform 0.15s;
+    z-index: 10;
+  }
+  #banner.show { opacity: 1; transform: translate(-50%, -60%); }
+  #gameover {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    background: rgba(11, 14, 20, 0.85);
+    z-index: 20;
+  }
+  #gameover h1 { font-size: 2.4em; margin-bottom: 4px; }
+  #gameover button {
+    margin-top: 18px;
+    font-size: 1.1em;
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: none;
+    background: #38bdf8;
+    color: #0b0e14;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+  <div id="ui">
+    <div class="score">Score : <span id="score">0</span></div>
+    <div class="combo" id="combo"></div>
+    <div class="timer">Temps : <span id="timer">120</span>s</div>
+  </div>
+  <div id="banner"></div>
+  <div id="help">
+    <b>SkateHangar</b><br/>
+    Flèches / ZQSD : rouler<br/>
+    Espace : ollie (saut)<br/>
+    Maj : grinder sur un rail/curb quand vous êtes dessus<br/>
+    R : réinitialiser la position
+  </div>
+  <div id="gameover">
+    <h1>Temps écoulé !</h1>
+    <div>Score final : <span id="finalscore">0</span></div>
+    <button id="retry">Rejouer</button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
