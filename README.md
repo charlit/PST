@@ -53,6 +53,17 @@ l'autre plutôt que de changer de pose brutalement.
   et grinder
 - **R** : réinitialiser la position si tu restes coincé
 
+## Mobile / tactile
+
+Sur téléphone ou tablette, le jeu détecte le tactile et affiche des
+boutons à l'écran (pavé directionnel à gauche, OLLIE/FIGURE à droite)
+au lieu de la légende clavier — voir `setupTouchControls()`. Un écran
+"tourne ton téléphone" s'affiche tant que l'appareil est en portrait ;
+en paysage, les boutons apparaissent et le jeu est jouable. Le
+copier-coller / menu contextuel tactile est désactivé partout
+(`user-select`, `-webkit-touch-callout`, `touch-action: none`) pour ne
+pas gêner les contrôles.
+
 ## La planche
 
 Le plateau (`buildBoard()`) a une vraie forme de skateboard : nose et
@@ -199,6 +210,15 @@ Ajoute cette ligne (vérifie toutes les 5 minutes) puis sauvegarde :
 Les logs du script sont dans `deploy/watch-deploy.log`. Avec ça,
 chaque `git push` sur `master` est automatiquement répercuté sur le
 Mac mini dans les 5 minutes qui suivent — sans rien faire de plus.
+
+> Le script compare la remote à un fichier marqueur
+> (`deploy/.last_deployed`), pas au HEAD local — volontairement : si
+> quelqu'un fait un `git pull` à la main sur le Mac mini en dehors du
+> script, le marqueur reste inchangé et le prochain passage du cron
+> reconstruit quand même l'image Docker. Ne fais donc jamais de
+> `git pull` manuel dans ce dossier ; laisse le script s'en charger
+> (ou, si tu dois le faire, relance ensuite
+> `docker-compose up -d --build` toi-même).
 
 ## Idées d'améliorations
 

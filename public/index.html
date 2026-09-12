@@ -2,9 +2,15 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>SkateHangar</title>
 <style>
+  * {
+    -webkit-touch-callout: none; /* désactive le menu copier/coller au appui long (iOS) */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
   html, body {
     margin: 0;
     padding: 0;
@@ -12,6 +18,10 @@
     background: #0b0e14;
     color: #f1f5f9;
     font-family: system-ui, sans-serif;
+    touch-action: none; /* empêche le scroll/zoom tactile du navigateur */
+    overscroll-behavior: none;
+    height: 100%;
+    width: 100%;
   }
   #ui {
     position: fixed;
@@ -19,7 +29,6 @@
     left: 12px;
     z-index: 10;
     text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-    user-select: none;
   }
   #ui .score { font-size: 2em; font-weight: 700; }
   #ui .combo { font-size: 1.1em; color: #38bdf8; min-height: 1.4em; }
@@ -34,7 +43,6 @@
     background: rgba(15, 23, 42, 0.55);
     padding: 10px 14px;
     border-radius: 8px;
-    user-select: none;
   }
   #banner {
     position: fixed;
@@ -73,7 +81,65 @@
     font-weight: 700;
     cursor: pointer;
   }
-  canvas { display: block; }
+  canvas { display: block; touch-action: none; }
+
+  /* ------------------------- Contrôles tactiles ------------------------- */
+  #touch-controls { display: none; }
+  body.touch #help { display: none; } /* la légende clavier n'a pas de sens au tactile */
+  body.touch #touch-controls {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 15;
+    pointer-events: none; /* seuls les boutons eux-mêmes captent le toucher */
+  }
+  .touch-btn {
+    position: absolute;
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(241, 245, 249, 0.16);
+    border: 2px solid rgba(241, 245, 249, 0.5);
+    color: #f1f5f9;
+    font-size: 1.6em;
+    font-weight: 700;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .touch-btn:active,
+  .touch-btn.active { background: rgba(241, 245, 249, 0.4); }
+
+  /* Pavé directionnel en bas à gauche */
+  #btn-left  { width: 62px; height: 62px; left: 18px;  bottom: 34px; }
+  #btn-right { width: 62px; height: 62px; left: 100px; bottom: 34px; }
+  #btn-up    { width: 62px; height: 62px; left: 59px;  bottom: 96px; }
+  #btn-down  { width: 62px; height: 62px; left: 59px;  bottom: -28px; }
+
+  /* Boutons d'action en bas à droite */
+  #btn-ollie { width: 78px; height: 78px; right: 100px; bottom: 30px; font-size: 0.85em; }
+  #btn-trick { width: 78px; height: 78px; right: 18px;  bottom: 90px; font-size: 0.85em; }
+
+  /* Message pour inviter à tourner l'appareil en mode paysage */
+  #rotate-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: #0b0e14;
+    color: #f1f5f9;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    text-align: center;
+    padding: 24px;
+  }
+  #rotate-overlay .icon { font-size: 3em; margin-bottom: 12px; }
+  @media (max-aspect-ratio: 1/1) and (max-width: 900px) {
+    body.touch #rotate-overlay { display: flex; }
+    body.touch #ui, body.touch #touch-controls, body.touch #help { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -95,6 +161,20 @@
     <h1>Temps écoulé !</h1>
     <div>Score final : <span id="finalscore">0</span></div>
     <button id="retry">Rejouer</button>
+  </div>
+
+  <div id="touch-controls">
+    <div class="touch-btn" id="btn-left">◀</div>
+    <div class="touch-btn" id="btn-right">▶</div>
+    <div class="touch-btn" id="btn-up">▲</div>
+    <div class="touch-btn" id="btn-down">▼</div>
+    <div class="touch-btn" id="btn-ollie">OLLIE</div>
+    <div class="touch-btn" id="btn-trick">FIGURE</div>
+  </div>
+
+  <div id="rotate-overlay">
+    <div class="icon">📱↻</div>
+    <div>Tourne ton téléphone en mode paysage pour jouer !</div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>

@@ -142,11 +142,49 @@ function init() {
   buildPlayer();
 
   window.addEventListener("resize", onResize);
+  window.addEventListener("orientationchange", () => setTimeout(onResize, 200));
   window.addEventListener("keydown", (e) => (keys[e.code] = true));
   window.addEventListener("keyup", (e) => (keys[e.code] = false));
   document.getElementById("retry").addEventListener("click", resetGame);
 
+  setupTouchControls();
   resetGame();
+}
+
+// Détecte le tactile, affiche les boutons à l'écran et les relie aux mêmes
+// codes que le clavier (`keys[...]`) pour ne pas dupliquer la logique de jeu.
+function setupTouchControls() {
+  const isTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  if (!isTouch) return;
+  document.body.classList.add("touch");
+
+  // Empêche le menu contextuel (copier/coller) sur appui long.
+  document.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  const bind = (id, code) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const start = (e) => {
+      e.preventDefault();
+      keys[code] = true;
+      el.classList.add("active");
+    };
+    const end = (e) => {
+      e.preventDefault();
+      keys[code] = false;
+      el.classList.remove("active");
+    };
+    el.addEventListener("touchstart", start, { passive: false });
+    el.addEventListener("touchend", end, { passive: false });
+    el.addEventListener("touchcancel", end, { passive: false });
+  };
+
+  bind("btn-left", "ArrowLeft");
+  bind("btn-right", "ArrowRight");
+  bind("btn-up", "ArrowUp");
+  bind("btn-down", "ArrowDown");
+  bind("btn-ollie", "Space");
+  bind("btn-trick", "KeyX");
 }
 
 function onResize() {
