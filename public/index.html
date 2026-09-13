@@ -117,9 +117,11 @@
   #btn-up    { width: 62px; height: 62px; left: 59px;  bottom: 96px; }
   #btn-down  { width: 62px; height: 62px; left: 59px;  bottom: -28px; }
 
-  /* Boutons d'action en bas à droite */
-  #btn-ollie { width: 78px; height: 78px; right: 100px; bottom: 30px; font-size: 0.85em; }
-  #btn-trick { width: 78px; height: 78px; right: 18px;  bottom: 90px; font-size: 0.85em; }
+  /* Boutons d'action en bas à droite, en grille 2x2 */
+  #btn-ollie    { width: 64px; height: 64px; right: 148px; bottom: 24px; font-size: 0.7em; }
+  #btn-kickflip { width: 64px; height: 64px; right: 76px;  bottom: 24px; font-size: 0.7em; }
+  #btn-shoveit  { width: 64px; height: 64px; right: 148px; bottom: 96px; font-size: 0.7em; }
+  #btn-spin     { width: 64px; height: 64px; right: 76px;  bottom: 96px; font-size: 0.7em; }
 
   /* Message pour inviter à tourner l'appareil en mode paysage */
   #rotate-overlay {
@@ -153,7 +155,8 @@
     <b>SkateHangar</b><br/>
     Flèches / ZQSD : rouler<br/>
     Espace : ollie (saut)<br/>
-    X : figure (kickflip) en l'air<br/>
+    X : kickflip · C : shove-it · V : 360° (en l'air)<br/>
+    Enchaînez les figures avant d'atterrir pour un combo !<br/>
     Approchez un rail/curb en l'air pour grinder<br/>
     R : réinitialiser la position
   </div>
@@ -169,7 +172,9 @@
     <div class="touch-btn" id="btn-up">▲</div>
     <div class="touch-btn" id="btn-down">▼</div>
     <div class="touch-btn" id="btn-ollie">OLLIE</div>
-    <div class="touch-btn" id="btn-trick">FIGURE</div>
+    <div class="touch-btn" id="btn-kickflip">FLIP</div>
+    <div class="touch-btn" id="btn-shoveit">SHOVE</div>
+    <div class="touch-btn" id="btn-spin">360</div>
   </div>
 
   <div id="rotate-overlay">

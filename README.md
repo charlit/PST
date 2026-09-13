@@ -48,10 +48,26 @@ l'autre plutôt que de changer de pose brutalement.
 
 - Flèches ou **ZQSD** : rouler / diriger le skateur
 - **Espace** : ollie (saut), ou pop-off pour sortir d'un grind
-- **X** : figure (kickflip) pendant que tu es en l'air
+- **X** kickflip · **C** shove-it · **V** 360° — figures aériennes,
+  enchaînables pendant un même saut
 - Approche-toi d'un rail/curb en l'air pour t'accrocher automatiquement
   et grinder
 - **R** : réinitialiser la position si tu restes coincé
+
+## Combos façon THPS
+
+Comme dans les vrais Tony Hawk's Pro Skater, les figures aériennes ne
+rapportent pas leurs points immédiatement : chaque figure déclenchée en
+l'air (`TRICKS` dans `game.js`) s'ajoute à `state.airTricks`, et
+c'est seulement à un **atterrissage propre** que le combo est
+"encaissé" (`bankCombo()`) : la somme des valeurs des figures est
+multipliée par le nombre de figures enchaînées, et affichée façon
+`KICKFLIP + 360° = 700`. Un bail (sortir de la zone jouable, tomber
+dans le vide) ne banque rien — mieux vaut atterrir proprement.
+
+Kickflip, shove-it et 360° animent chacun un axe différent (planche ou
+corps), donc ils peuvent aussi se superposer pendant un seul saut pour
+un combo encore plus gros.
 
 ## Mobile / tactile
 

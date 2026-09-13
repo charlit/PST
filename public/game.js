@@ -66,11 +66,18 @@ const state = {
   score: 0,
   timeLeft: MATCH_TIME,
   over: false,
-  trickActive: false,
-  trickTime: 0,
+  activeTricks: {}, // { [id]: { time, duration } } — figures aériennes en cours d'animation
+  airTricks: [], // { name, value } enchaînées depuis le dernier décollage, banquées à l'atterrissage
+  airSpin: 0, // rotation visuelle du corps pendant un 360°, indépendante du cap (yaw)
 };
 
-const TRICK_DURATION = 0.45; // secondes pour un tour complet de kickflip
+// Figures aériennes façon THPS : chacune anime un axe différent (planche ou
+// corps) donc elles peuvent s'enchaîner/se superposer pendant un même saut.
+const TRICKS = {
+  kickflip: { key: "KeyX", name: "Kickflip", value: 150, duration: 0.45 },
+  shoveit: { key: "KeyC", name: "Shove-it", value: 150, duration: 0.4 },
+  spin360: { key: "KeyV", name: "360°", value: 200, duration: 0.55 },
+};
 
 const keys = {};
 
@@ -184,7 +191,9 @@ function setupTouchControls() {
   bind("btn-up", "ArrowUp");
   bind("btn-down", "ArrowDown");
   bind("btn-ollie", "Space");
-  bind("btn-trick", "KeyX");
+  bind("btn-kickflip", "KeyX");
+  bind("btn-shoveit", "KeyC");
+  bind("btn-spin", "KeyV");
 }
 
 function onResize() {
@@ -956,29 +965,43 @@ function handleInput(dt) {
     respawn();
   }
 
-  if (keys["KeyX"]) {
-    keys["KeyX"] = false;
-    if (!state.grounded && !state.grinding && !state.trickActive) {
-      state.trickActive = true;
-      state.trickTime = 0;
-      addScore(150, "KICKFLIP !");
-    }
+  for (const id in TRICKS) {
+    const trick = TRICKS[id];
+    if (!keys[trick.key]) continue;
+    keys[trick.key] = false;
+    if (state.grounded || state.grinding || state.activeTricks[id]) continue;
+    state.activeTricks[id] = { time: 0, duration: trick.duration };
+    state.airTricks.push({ name: trick.name, value: trick.value });
+    state.comboCount += 1;
+    state.comboTimer = 3;
+    showBanner(trick.name);
   }
 }
 
-// Fait tourner la planche sur elle-même (façon kickflip) pendant une figure ;
-// revient doucement à plat sinon.
+// Anime chaque figure aérienne en cours sur son propre axe (planche ou
+// corps), pour qu'on puisse en enchaîner plusieurs pendant un même saut.
+// Les axes sans figure active reviennent doucement à zéro.
 function updateTrick(dt) {
-  if (!state.trickActive) {
-    boardFlip.rotation.z *= Math.max(0, 1 - 10 * dt);
-    return;
-  }
-  state.trickTime += dt;
-  const t = Math.min(state.trickTime / TRICK_DURATION, 1);
-  boardFlip.rotation.z = t * Math.PI * 2;
-  if (t >= 1) {
-    state.trickActive = false;
-    boardFlip.rotation.z = 0;
+  if (!state.activeTricks.kickflip) boardFlip.rotation.z *= Math.max(0, 1 - 10 * dt);
+  if (!state.activeTricks.shoveit) boardFlip.rotation.y *= Math.max(0, 1 - 10 * dt);
+  if (!state.activeTricks.spin360) state.airSpin *= Math.max(0, 1 - 10 * dt);
+
+  for (const id in state.activeTricks) {
+    const active = state.activeTricks[id];
+    active.time += dt;
+    const t = Math.min(active.time / active.duration, 1);
+    const angle = t * Math.PI * 2;
+
+    if (id === "kickflip") boardFlip.rotation.z = angle;
+    else if (id === "shoveit") boardFlip.rotation.y = angle;
+    else if (id === "spin360") state.airSpin = angle;
+
+    if (t >= 1) {
+      delete state.activeTricks[id];
+      if (id === "kickflip") boardFlip.rotation.z = 0;
+      else if (id === "shoveit") boardFlip.rotation.y = 0;
+      else if (id === "spin360") state.airSpin = 0;
+    }
   }
 }
 
@@ -1009,7 +1032,16 @@ function updatePhysics(dt) {
       state.pos.y = groundY;
       state.vy = 0;
       state.grounded = true;
-      if (wasAirborne && state.comboCount > 0) {
+      if (wasAirborne && state.airTricks.length > 0) {
+        // Combo façon THPS : les figures ne rapportent leurs points qu'à un
+        // atterrissage propre, multipliés par le nombre de figures enchaînées.
+        const base = state.airTricks.reduce((sum, t) => sum + t.value, 0);
+        const multiplier = state.airTricks.length;
+        const total = base * multiplier;
+        const comboString = state.airTricks.map((t) => t.name).join(" + ");
+        bankCombo(total, `${comboString} = ${Math.round(total)}`);
+        state.airTricks = [];
+      } else if (wasAirborne && state.comboCount > 0) {
         addScore(50 * state.comboCount, "LANDÉ !");
       }
     }
@@ -1110,9 +1142,18 @@ function addScore(amount, banner) {
   }
 }
 
+// Encaisse un combo de figures aériennes : ajoute les points d'un coup et
+// referme le combo (contrairement à addScore, qui l'alimente).
+function bankCombo(amount, banner) {
+  state.score += amount;
+  state.comboCount = 0;
+  state.comboTimer = 0;
+  showBanner(banner);
+}
+
 function updatePlayerTransform() {
   player.position.copy(state.pos);
-  player.rotation.y = state.yaw;
+  player.rotation.y = state.yaw + state.airSpin;
   const lean = state.grinding ? 0 : THREE.MathUtils.clamp(-state.vy * 0.03, -0.4, 0.4);
   board.rotation.x = lean;
 }
@@ -1161,8 +1202,10 @@ function respawn() {
   state.grinding = null;
   state.comboCount = 0;
   state.comboTimer = 0;
-  state.trickActive = false;
-  state.trickTime = 0;
+  state.activeTricks = {};
+  state.airTricks = [];
+  state.airSpin = 0;
+  boardFlip.rotation.set(0, 0, 0);
 }
 
 function endGame() {
